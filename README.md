@@ -1,4 +1,4 @@
-# osthrpool ![GoDoc](https://godoc.org/github.com/dwlnetnl/osthrpool?status.svg)
+# osthrpool [![GoDoc](https://godoc.org/github.com/dwlnetnl/osthrpool?status.svg)](https://godoc.org/github.com/dwlnetnl/osthrpool)
 Package osthrpool provides a pool of locked OS threads that grows and shrinks automatically and distribute the load over the threads.
 
 Example:
