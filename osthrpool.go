@@ -18,6 +18,14 @@ type Pool struct {
 	workers queue
 	mu      sync.Mutex // protects workers
 	exit    chan *worker
+
+	// InitFn is called by a worker just before it starts the work loop. The
+	// goroutine is locked to an OS thread when InitFn is called.
+	InitFn func()
+
+	// ExitFn is called by a worker just before it exits. The goroutine is still
+	// locked to an OS thread when ExitFn is called.
+	ExitFn func()
 }
 
 // New returns a pool of locked OS threads that grows to it's maximum size and
@@ -55,7 +63,7 @@ func (p *Pool) startWorker() {
 			go p.collectWorkers()
 		}
 
-		w := newWorker(p.exit, p.timeout)
+		w := newWorker(p.exit, p.timeout, p.InitFn, p.ExitFn)
 		heap.Push(&p.workers, w)
 		go w.work()
 	}
@@ -106,19 +114,27 @@ type worker struct {
 	done    chan struct{}
 	index   int
 	pending int
+	initFn  func()
+	exitFn  func()
 }
 
-func newWorker(exit chan *worker, timeout time.Duration) *worker {
+func newWorker(exit chan *worker, timeout time.Duration, initFn, exitFn func()) *worker {
 	return &worker{
 		exit:    exit,
 		timeout: timeout,
 		tasks:   make(chan Task),
 		done:    make(chan struct{}),
+		initFn:  initFn,
+		exitFn:  exitFn,
 	}
 }
 
 func (w *worker) work() {
 	runtime.LockOSThread()
+
+	if w.initFn != nil {
+		w.initFn()
+	}
 
 	for {
 		select {
@@ -126,6 +142,10 @@ func (w *worker) work() {
 			task()
 			w.done <- struct{}{}
 		case <-time.After(w.timeout):
+			if w.exitFn != nil {
+				w.exitFn()
+			}
+
 			runtime.UnlockOSThread()
 			w.exit <- w
 			return
